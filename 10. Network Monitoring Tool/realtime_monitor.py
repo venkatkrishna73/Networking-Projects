@@ -1,17 +1,15 @@
 import streamlit as st
-import psutil
 import time
+import urllib.request
 
-# Set page title and layout
-st.set_page_config(page_title="Real-Time Network Monitor", layout="wide")
-st.title("🌐 Real-Time Network Monitor")
+# Page configuration
+st.set_page_config(page_title="Network Latency & Speed Monitor", layout="wide")
+st.title("🌐 Network Latency & Speed Monitor")
+st.caption("Pure Python implementation — No external dependencies required.")
 
-# Initialize session state variables for tracking previous counters and logs
+# Initialize session state variables
 if "running" not in st.session_state:
     st.session_state.running = False
-
-if "prev" not in st.session_state:
-    st.session_state.prev = psutil.net_io_counters()
 
 if "logs" not in st.session_state:
     st.session_state.logs = []
@@ -23,7 +21,6 @@ with col_start:
     if st.button("Start", type="primary"):
         if not st.session_state.running:
             st.session_state.running = True
-            st.session_state.prev = psutil.net_io_counters()
             st.session_state.logs.append("Monitoring started...")
             st.rerun()
 
@@ -37,63 +34,67 @@ with col_stop:
 st.divider()
 
 # Layout for metrics display
-st.subheader("Network Metrics")
+st.subheader("Live Network Metrics")
 metric_col1, metric_col2, metric_col3 = st.columns(3)
 
 with metric_col1:
-    upload_speed_slot = st.empty()
-    download_speed_slot = st.empty()
+    latency_slot = st.empty()
 
 with metric_col2:
-    total_bytes_sent_slot = st.empty()
-    total_bytes_recv_slot = st.empty()
+    speed_slot = st.empty()
 
 with metric_col3:
-    packets_sent_slot = st.empty()
-    packets_recv_slot = st.empty()
+    status_slot = st.empty()
 
 # Layout for Event Log
 st.subheader("Event Log")
 log_container = st.empty()
 
-# Display current logs
 def render_logs():
-    log_text = "\n".join(st.session_state.logs[-10:])  # Keep last 10 logs
+    log_text = "\n".join(st.session_state.logs[-10:])
     log_container.text_area("Logs", value=log_text, height=150, disabled=True)
 
 render_logs()
 
-# Active monitoring loop using Streamlit live auto-refresh
+# Function to test network ping and speed using standard library
+def check_network():
+    target_url = "https://www.google.com"
+    start_time = time.time()
+    try:
+        req = urllib.request.Request(
+            target_url, 
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = response.read()
+            end_time = time.time()
+            
+            latency_ms = (end_time - start_time) * 1000
+            bytes_received = len(data)
+            duration = end_time - start_time
+            speed_kbps = (bytes_received / duration) / 1024 if duration > 0 else 0
+            
+            return True, latency_ms, speed_kbps
+    except Exception as e:
+        return False, 0.0, 0.0
+
+# Active monitoring loop
 if st.session_state.running:
-    now = psutil.net_io_counters()
+    success, latency, speed = check_network()
 
-    # Calculate differences over the last second
-    upload_bps = now.bytes_sent - st.session_state.prev.bytes_sent
-    download_bps = now.bytes_recv - st.session_state.prev.bytes_recv
-    packets_sent = now.packets_sent - st.session_state.prev.packets_sent
-    packets_recv = now.packets_recv - st.session_state.prev.packets_recv
+    if success:
+        latency_slot.metric("Response Time (Ping)", f"{latency:.1f} ms")
+        speed_slot.metric("Fetch Speed", f"{speed:.2f} KB/s")
+        status_slot.metric("Connection Status", "Online 🟢")
+    else:
+        latency_slot.metric("Response Time (Ping)", "N/A")
+        speed_slot.metric("Fetch Speed", "0 KB/s")
+        status_slot.metric("Connection Status", "Offline / Error 🔴")
+        st.session_state.logs.append("Failed to reach target endpoint.")
 
-    # Update state baseline
-    st.session_state.prev = now
-
-    # Render metrics in real time
-    upload_speed_slot.metric("Upload Speed", f"{upload_bps / 1024:.2f} KB/s")
-    download_speed_slot.metric("Download Speed", f"{download_bps / 1024:.2f} KB/s")
-
-    total_bytes_sent_slot.metric("Total Bytes Sent", f"{now.bytes_sent / (1024 * 1024):.2f} MB")
-    total_bytes_recv_slot.metric("Total Bytes Received", f"{now.bytes_recv / (1024 * 1024):.2f} MB")
-
-    packets_sent_slot.metric("Packets Sent (last 1s)", packets_sent)
-    packets_recv_slot.metric("Packets Received (last 1s)", packets_recv)
-
-    # Wait 1 second and refresh page automatically
     time.sleep(1)
     st.rerun()
 else:
-    # Display initial zeroes when stopped
-    upload_speed_slot.metric("Upload Speed", "0 KB/s")
-    download_speed_slot.metric("Download Speed", "0 KB/s")
-    total_bytes_sent_slot.metric("Total Bytes Sent", "0 MB")
-    total_bytes_recv_slot.metric("Total Bytes Received", "0 MB")
-    packets_sent_slot.metric("Packets Sent (last 1s)", 0)
-    packets_recv_slot.metric("Packets Received (last 1s)", 0)
+    latency_slot.metric("Response Time (Ping)", "0 ms")
+    speed_slot.metric("Fetch Speed", "0 KB/s")
+    status_slot.metric("Connection Status", "Stopped ⏸️")
