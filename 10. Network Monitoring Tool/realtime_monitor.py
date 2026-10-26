@@ -1,102 +1,99 @@
-#import tkinter as tk
-from tkinter import ttk
+import streamlit as st
 import psutil
 import time
-import threading
 
-class RealTimeMonitor:
-    def __init__(self, ui):
-        self.ui = ui
-        self.running = False
+# Set page title and layout
+st.set_page_config(page_title="Real-Time Network Monitor", layout="wide")
+st.title("🌐 Real-Time Network Monitor")
 
-        # Initial counters
-        self.prev = psutil.net_io_counters()
+# Initialize session state variables for tracking previous counters and logs
+if "running" not in st.session_state:
+    st.session_state.running = False
 
-    def start(self):
-        if not self.running:
-            self.running = True
-            threading.Thread(target=self.update_loop, daemon=True).start()
-            self.ui.log("Monitoring started...")
+if "prev" not in st.session_state:
+    st.session_state.prev = psutil.net_io_counters()
 
-    def stop(self):
-        self.running = False
-        self.ui.log("Monitoring stopped.")
+if "logs" not in st.session_state:
+    st.session_state.logs = []
 
-    def update_loop(self):
-        while self.running:
-            now = psutil.net_io_counters()
+# Control buttons
+col_start, col_stop, _ = st.columns([1, 1, 4])
 
-            # Calculate bytes per second
-            upload_bps = now.bytes_sent - self.prev.bytes_sent
-            download_bps = now.bytes_recv - self.prev.bytes_recv
+with col_start:
+    if st.button("Start", type="primary"):
+        if not st.session_state.running:
+            st.session_state.running = True
+            st.session_state.prev = psutil.net_io_counters()
+            st.session_state.logs.append("Monitoring started...")
+            st.rerun()
 
-            # Packets
-            packets_sent = now.packets_sent - self.prev.packets_sent
-            packets_recv = now.packets_recv - self.prev.packets_recv
+with col_stop:
+    if st.button("Stop"):
+        if st.session_state.running:
+            st.session_state.running = False
+            st.session_state.logs.append("Monitoring stopped.")
+            st.rerun()
 
-            self.prev = now  # update baseline
+st.divider()
 
-            self.ui.update_stats(upload_bps, download_bps,
-                                 now.bytes_sent, now.bytes_recv,
-                                 packets_sent, packets_recv)
+# Layout for metrics display
+st.subheader("Network Metrics")
+metric_col1, metric_col2, metric_col3 = st.columns(3)
 
-            time.sleep(1)
+with metric_col1:
+    upload_speed_slot = st.empty()
+    download_speed_slot = st.empty()
 
+with metric_col2:
+    total_bytes_sent_slot = st.empty()
+    total_bytes_recv_slot = st.empty()
 
-class MonitorUI:
-    def __init__(self, root):
-        self.root = root
-        root.title("Real-Time Network Monitor")
+with metric_col3:
+    packets_sent_slot = st.empty()
+    packets_recv_slot = st.empty()
 
-        frame = ttk.Frame(root, padding=10)
-        frame.grid()
+# Layout for Event Log
+st.subheader("Event Log")
+log_container = st.empty()
 
-        # Start/Stop Buttons
-        ttk.Button(frame, text="Start", command=self.start_monitor).grid(row=0, column=0)
-        ttk.Button(frame, text="Stop", command=self.stop_monitor).grid(row=0, column=1)
+# Display current logs
+def render_logs():
+    log_text = "\n".join(st.session_state.logs[-10:])  # Keep last 10 logs
+    log_container.text_area("Logs", value=log_text, height=150, disabled=True)
 
-        # Stats Display
-        labels = [
-            "Upload Speed (B/s):", "Download Speed (B/s):",
-            "Total Bytes Sent:", "Total Bytes Received:",
-            "Packets Sent (last 1s):", "Packets Received (last 1s):"
-        ]
+render_logs()
 
-        self.values = {}
+# Active monitoring loop using Streamlit live auto-refresh
+if st.session_state.running:
+    now = psutil.net_io_counters()
 
-        for i, label in enumerate(labels):
-            ttk.Label(frame, text=label).grid(row=i+1, column=0, sticky="w")
-            var = tk.StringVar(value="0")
-            ttk.Label(frame, textvariable=var).grid(row=i+1, column=1, sticky="w")
-            self.values[label] = var
+    # Calculate differences over the last second
+    upload_bps = now.bytes_sent - st.session_state.prev.bytes_sent
+    download_bps = now.bytes_recv - st.session_state.prev.bytes_recv
+    packets_sent = now.packets_sent - st.session_state.prev.packets_sent
+    packets_recv = now.packets_recv - st.session_state.prev.packets_recv
 
-        # Log box
-        ttk.Label(frame, text="Event Log:").grid(row=7, column=0, sticky="nw")
-        self.log_box = tk.Text(frame, width=60, height=10)
-        self.log_box.grid(row=8, column=0, columnspan=2)
+    # Update state baseline
+    st.session_state.prev = now
 
-        self.monitor = RealTimeMonitor(self)
+    # Render metrics in real time
+    upload_speed_slot.metric("Upload Speed", f"{upload_bps / 1024:.2f} KB/s")
+    download_speed_slot.metric("Download Speed", f"{download_bps / 1024:.2f} KB/s")
 
-    def start_monitor(self):
-        self.monitor.start()
+    total_bytes_sent_slot.metric("Total Bytes Sent", f"{now.bytes_sent / (1024 * 1024):.2f} MB")
+    total_bytes_recv_slot.metric("Total Bytes Received", f"{now.bytes_recv / (1024 * 1024):.2f} MB")
 
-    def stop_monitor(self):
-        self.monitor.stop()
+    packets_sent_slot.metric("Packets Sent (last 1s)", packets_sent)
+    packets_recv_slot.metric("Packets Received (last 1s)", packets_recv)
 
-    def update_stats(self, up, down, total_up, total_down, ps, pr):
-        self.values["Upload Speed (B/s):"].set(str(up))
-        self.values["Download Speed (B/s):"].set(str(down))
-        self.values["Total Bytes Sent:"].set(str(total_up))
-        self.values["Total Bytes Received:"].set(str(total_down))
-        self.values["Packets Sent (last 1s):"].set(str(ps))
-        self.values["Packets Received (last 1s):"].set(str(pr))
-
-    def log(self, text):
-        self.log_box.insert(tk.END, text + "\n")
-        self.log_box.see(tk.END)
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    ui = MonitorUI(root)
-    root.mainloop()
+    # Wait 1 second and refresh page automatically
+    time.sleep(1)
+    st.rerun()
+else:
+    # Display initial zeroes when stopped
+    upload_speed_slot.metric("Upload Speed", "0 KB/s")
+    download_speed_slot.metric("Download Speed", "0 KB/s")
+    total_bytes_sent_slot.metric("Total Bytes Sent", "0 MB")
+    total_bytes_recv_slot.metric("Total Bytes Received", "0 MB")
+    packets_sent_slot.metric("Packets Sent (last 1s)", 0)
+    packets_recv_slot.metric("Packets Received (last 1s)", 0)
