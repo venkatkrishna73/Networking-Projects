@@ -5,7 +5,7 @@ from datetime import datetime
 
 # Page configuration
 st.set_page_config(
-    page_title="Advanced Network Traffic & QoS Monitor",
+    page_title="Real-Time Network Traffic & QoS Monitor",
     layout="wide"
 )
 
