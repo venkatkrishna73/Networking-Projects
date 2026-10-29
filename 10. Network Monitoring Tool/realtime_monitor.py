@@ -5,12 +5,12 @@ from datetime import datetime
 
 # Page configuration
 st.set_page_config(
-    page_title="Network Latency & Speed Monitor",
+    page_title="Advanced Network Traffic & QoS Monitor",
     layout="wide"
 )
 
-st.title("🌐 Network Latency & Speed Monitor")
-st.caption("Pure Python implementation — No external dependencies required.")
+st.title("🌐 Advanced Network Traffic & QoS Monitor")
+st.caption("Computer Networks Course Project (22PC1IN202) — Application Layer & Traffic Analyzer")
 
 # Initialize session state variables
 if "running" not in st.session_state:
@@ -24,6 +24,18 @@ if "latencies" not in st.session_state:
 
 if "speeds" not in st.session_state:
     st.session_state.speeds = []
+
+if "total_bytes_out" not in st.session_state:
+    st.session_state.total_bytes_out = 0
+
+if "total_bytes_in" not in st.session_state:
+    st.session_state.total_bytes_in = 0
+
+if "packets_sent" not in st.session_state:
+    st.session_state.packets_sent = 0
+
+if "packets_received" not in st.session_state:
+    st.session_state.packets_received = 0
 
 # Sidebar Controls
 st.sidebar.header("⚙️ Configuration")
@@ -47,27 +59,59 @@ with col_stop:
             st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Monitoring stopped.")
             st.rerun()
 
-if st.sidebar.button("Clear History", use_container_width=True):
+if st.sidebar.button("Reset Counters & History", use_container_width=True):
     st.session_state.logs = []
     st.session_state.latencies = []
     st.session_state.speeds = []
+    st.session_state.total_bytes_out = 0
+    st.session_state.total_bytes_in = 0
+    st.session_state.packets_sent = 0
+    st.session_state.packets_received = 0
     st.rerun()
 
 st.divider()
 
-# Live Metrics Slots
-st.subheader("📊 Live Network Metrics")
+# --- Section 1: Cumulative Network Traffic & Packet Stats (Input/Output) ---
+st.subheader("📦 Cumulative Data & Packet Metrics (Input / Output)")
+stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+
+with stat_col1:
+    bytes_sent_kb = st.session_state.total_bytes_out / 1024
+    st.metric("Total Data Sent (Output)", f"{bytes_sent_kb:.2f} KB")
+
+with stat_col2:
+    bytes_recv_kb = st.session_state.total_bytes_in / 1024
+    st.metric("Total Data Received (Input)", f"{bytes_recv_kb:.2f} KB")
+
+with stat_col3:
+    st.metric("Total Packets Sent", f"{st.session_state.packets_sent:,}")
+
+with stat_col4:
+    st.metric("Total Packets Received", f"{st.session_state.packets_received:,}")
+
+st.divider()
+
+# --- Section 2: Real-Time Live Metrics ---
+st.subheader("📊 Live Application-Layer Metrics")
 metric_col1, metric_col2, metric_col3 = st.columns(3)
 latency_slot = metric_col1.empty()
 speed_slot = metric_col2.empty()
-status_slot = metric_col2.empty() # placeholder setup
+status_slot = metric_col3.empty()
 
-# Charts Section
+# --- Section 3: Performance Charts with Axis Descriptions ---
 chart_col1, chart_col2 = st.columns(2)
-latency_chart_slot = chart_col1.empty()
-speed_chart_slot = chart_col2.empty()
 
-# Event Log Section
+with chart_col1:
+    st.markdown("##### ⏱️ Response Time (Latency)")
+    st.caption("**Y-Axis:** Latency in milliseconds (ms) | **X-Axis:** Polling sequence")
+    latency_chart_slot = st.empty()
+
+with chart_col2:
+    st.markdown("##### 🚀 Fetch Speed (Throughput)")
+    st.caption("**Y-Axis:** Speed in KB/s | **X-Axis:** Polling sequence")
+    speed_chart_slot = st.empty()
+
+# --- Section 4: Event Log ---
 st.subheader("📋 Event Log")
 log_container = st.empty()
 
@@ -77,41 +121,56 @@ def render_logs():
 
 render_logs()
 
-# Network Check Function using standard library
+# Network Check Function simulating application request (HTTP GET)
 def check_network():
     start_time = time.time()
     try:
-        req = urllib.request.Request(target_url, headers={'User-Agent': 'Mozilla/5.0'})
+        # Constructing outgoing request payload simulation
+        user_agent = 'Mozilla/5.0 (ComputerNetworksProject/1.0)'
+        req = urllib.request.Request(target_url, headers={'User-Agent': user_agent})
+        
+        # Estimate outgoing request size (headers + URL length)
+        outgoing_size = len(target_url) + len(user_agent) + 100 
+        
         with urllib.request.urlopen(req, timeout=3) as response:
             data = response.read()
             end_time = time.time()
             
             latency_ms = (end_time - start_time) * 1000
-            bytes_received = len(data)
+            incoming_size = len(data)
             duration = end_time - start_time
-            speed_kbps = (bytes_received / duration) / 1024 if duration > 0 else 0
+            speed_kbps = (incoming_size / duration) / 1024 if duration > 0 else 0
             
-            return True, latency_ms, speed_kbps
+            return True, latency_ms, speed_kbps, outgoing_size, incoming_size
     except Exception:
-        return False, 0.0, 0.0
+        return False, 0.0, 0.0, 0, 0
 
 # Active monitoring execution loop
 if st.session_state.running:
-    success, latency, speed = check_network()
+    success, latency, speed, out_bytes, in_bytes = check_network()
     timestamp = datetime.now().strftime('%H:%M:%S')
 
     if success:
         latency_slot.metric("Response Time (Ping)", f"{latency:.1f} ms")
         speed_slot.metric("Fetch Speed", f"{speed:.2f} KB/s")
-        metric_col3.metric("Connection Status", "Online 🟢")
+        status_slot.metric("Connection Status", "Online 🟢")
+        
+        # Update cumulative counters
+        st.session_state.total_bytes_out += out_bytes
+        st.session_state.total_bytes_in += in_bytes
+        st.session_state.packets_sent += 1       # 1 HTTP GET Request Packet
+        st.session_state.packets_received += 1   # 1 HTTP Response Packet
         
         st.session_state.latencies.append(latency)
         st.session_state.speeds.append(speed)
     else:
         latency_slot.metric("Response Time (Ping)", "N/A")
         speed_slot.metric("Fetch Speed", "0 KB/s")
-        metric_col3.metric("Connection Status", "Offline / Error 🔴")
-        st.session_state.logs.append(f"[{timestamp}] Failed to reach target endpoint.")
+        status_slot.metric("Connection Status", "Offline / Error 🔴")
+        st.session_state.logs.append(f"[{timestamp}] Failed to reach target endpoint {target_url}.")
+        
+        # Count failed attempt as a sent packet attempt
+        st.session_state.packets_sent += 1
 
     # Render native line charts
     if st.session_state.latencies:
@@ -123,7 +182,7 @@ if st.session_state.running:
 else:
     latency_slot.metric("Response Time (Ping)", "0 ms")
     speed_slot.metric("Fetch Speed", "0 KB/s")
-    metric_col3.metric("Connection Status", "Stopped ⏸️")
+    status_slot.metric("Connection Status", "Stopped ⏸️")
     
     if st.session_state.latencies:
         latency_chart_slot.line_chart(st.session_state.latencies)
