@@ -10,84 +10,115 @@ st.set_page_config(
 )
 
 st.title("🌐 Real-Time Network Traffic & QoS Monitor")
-st.caption("Computer Networks Course Project (22PC1IN202) — Application Layer & Traffic Analyzer")
+st.caption("Computer Networks Course Project (22PC1IN202) — Isolated Endpoint Traffic & Latency Tracking")
 
-# Initialize session state variables
+# --- Initialize Global Session States ---
 if "running" not in st.session_state:
     st.session_state.running = False
 
-if "logs" not in st.session_state:
-    st.session_state.logs = []
+if "current_target" not in st.session_state:
+    st.session_state.current_target = "https://www.google.com"
 
-if "latencies" not in st.session_state:
-    st.session_state.latencies = []
+# Dictionary to hold isolated data streams per endpoint
+if "endpoint_data" not in st.session_state:
+    st.session_state.endpoint_data = {}
 
-if "speeds" not in st.session_state:
-    st.session_state.speeds = []
+# Helper function to initialize data structure for a specific endpoint
+def init_endpoint(url):
+    if url not in st.session_state.endpoint_data:
+        st.session_state.endpoint_data[url] = {
+            "latencies": [],
+            "speeds": [],
+            "logs": [],
+            "total_bytes_out": 0,
+            "total_bytes_in": 0,
+            "packets_sent": 0,
+            "packets_received": 0,
+            "status": "Idle ⏸️"
+        }
 
-if "total_bytes_out" not in st.session_state:
-    st.session_state.total_bytes_out = 0
+# Initialize default endpoint
+init_endpoint(st.session_state.current_target)
 
-if "total_bytes_in" not in st.session_state:
-    st.session_state.total_bytes_in = 0
-
-if "packets_sent" not in st.session_state:
-    st.session_state.packets_sent = 0
-
-if "packets_received" not in st.session_state:
-    st.session_state.packets_received = 0
-
-# Sidebar Controls
+# --- Sidebar Controls & Past Endpoint Archive ---
 st.sidebar.header("⚙️ Configuration")
-target_url = st.sidebar.text_input("Target Endpoint", value="https://www.google.com")
+target_url_input = st.sidebar.text_input("Target Endpoint", value=st.session_state.current_target)
+
+# If user changes the endpoint, switch context cleanly
+if target_url_input != st.session_state.current_target:
+    st.session_state.current_target = target_url_input
+    init_endpoint(target_url_input)
+    st.rerun()
+
 refresh_rate = st.sidebar.slider("Refresh Interval (s)", 1, 5, 1)
 
 st.sidebar.divider()
+st.sidebar.subheader("🚀 Monitor Controls")
 col_start, col_stop = st.sidebar.columns(2)
+
+active_data = st.session_state.endpoint_data[st.session_state.current_target]
 
 with col_start:
     if st.button("Start Monitor", type="primary", use_container_width=True):
         if not st.session_state.running:
             st.session_state.running = True
-            st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Monitoring started...")
+            active_data["status"] = "Online 🟢"
+            active_data["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] Monitoring started for {st.session_state.current_target}")
             st.rerun()
 
 with col_stop:
     if st.button("Stop", use_container_width=True):
         if st.session_state.running:
             st.session_state.running = False
-            st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Monitoring stopped.")
+            active_data["status"] = "Stopped ⏸️"
+            active_data["logs"].append(f"[{datetime.now().strftime('%H:%M:%S')}] Monitoring stopped.")
             st.rerun()
 
-if st.sidebar.button("Reset Counters & History", use_container_width=True):
-    st.session_state.logs = []
-    st.session_state.latencies = []
-    st.session_state.speeds = []
-    st.session_state.total_bytes_out = 0
-    st.session_state.total_bytes_in = 0
-    st.session_state.packets_sent = 0
-    st.session_state.packets_received = 0
+if st.sidebar.button("Clear Current Endpoint Data", use_container_width=True):
+    st.session_state.endpoint_data[st.session_state.current_target] = {
+        "latencies": [],
+        "speeds": [],
+        "logs": [],
+        "total_bytes_out": 0,
+        "total_bytes_in": 0,
+        "packets_sent": 0,
+        "packets_received": 0,
+        "status": "Idle ⏸️"
+    }
     st.rerun()
+
+# --- Sidebar History Archive (Past Endpoints) ---
+st.sidebar.divider()
+st.sidebar.subheader("📂 Past Monitored Endpoints")
+st.sidebar.caption("Click an endpoint to review its isolated past data:")
+
+for endpoint in list(st.session_state.endpoint_data.keys()):
+    if st.sidebar.button(f"🔗 {endpoint}", use_container_width=True):
+        st.session_state.current_target = endpoint
+        st.rerun()
 
 st.divider()
 
-# --- Section 1: Cumulative Network Traffic & Packet Stats (Input/Output) ---
+# --- Active Dashboard Header ---
+st.markdown(f"### 📍 Active Endpoint Context: `{st.session_state.current_target}`")
+
+# --- Section 1: Cumulative Data & Packet Metrics (Input / Output) ---
 st.subheader("📦 Cumulative Data & Packet Metrics (Input / Output)")
 stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
 
 with stat_col1:
-    bytes_sent_kb = st.session_state.total_bytes_out / 1024
+    bytes_sent_kb = active_data["total_bytes_out"] / 1024
     st.metric("Total Data Sent (Output)", f"{bytes_sent_kb:.2f} KB")
 
 with stat_col2:
-    bytes_recv_kb = st.session_state.total_bytes_in / 1024
+    bytes_recv_kb = active_data["total_bytes_in"] / 1024
     st.metric("Total Data Received (Input)", f"{bytes_recv_kb:.2f} KB")
 
 with stat_col3:
-    st.metric("Total Packets Sent", f"{st.session_state.packets_sent:,}")
+    st.metric("Total Packets Sent", f"{active_data['packets_sent']:,}")
 
 with stat_col4:
-    st.metric("Total Packets Received", f"{st.session_state.packets_received:,}")
+    st.metric("Total Packets Received", f"{active_data['packets_received']:,}")
 
 st.divider()
 
@@ -116,21 +147,19 @@ st.subheader("📋 Event Log")
 log_container = st.empty()
 
 def render_logs():
-    log_text = "\n".join(st.session_state.logs[-10:])
-    log_container.text_area("Logs", value=log_text, height=130, disabled=True)
+    log_text = "\n".join(active_data["logs"][-10:])
+    log_container.text_area("Logs", value=log_text, height=130, disabled=True, key=f"log_{st.session_state.current_target}")
 
 render_logs()
 
 # Network Check Function simulating application request (HTTP GET)
-def check_network():
+def check_network(target):
     start_time = time.time()
     try:
-        # Constructing outgoing request payload simulation
         user_agent = 'Mozilla/5.0 (ComputerNetworksProject/1.0)'
-        req = urllib.request.Request(target_url, headers={'User-Agent': user_agent})
+        req = urllib.request.Request(target, headers={'User-Agent': user_agent})
         
-        # Estimate outgoing request size (headers + URL length)
-        outgoing_size = len(target_url) + len(user_agent) + 100 
+        outgoing_size = len(target) + len(user_agent) + 100 
         
         with urllib.request.urlopen(req, timeout=3) as response:
             data = response.read()
@@ -147,43 +176,45 @@ def check_network():
 
 # Active monitoring execution loop
 if st.session_state.running:
-    success, latency, speed, out_bytes, in_bytes = check_network()
+    success, latency, speed, out_bytes, in_bytes = check_network(st.session_state.current_target)
     timestamp = datetime.now().strftime('%H:%M:%S')
 
     if success:
         latency_slot.metric("Response Time (Ping)", f"{latency:.1f} ms")
         speed_slot.metric("Fetch Speed", f"{speed:.2f} KB/s")
-        status_slot.metric("Connection Status", "Online 🟢")
+        status_slot.metric("Connection Status", active_data["status"])
         
-        # Update cumulative counters
-        st.session_state.total_bytes_out += out_bytes
-        st.session_state.total_bytes_in += in_bytes
-        st.session_state.packets_sent += 1       # 1 HTTP GET Request Packet
-        st.session_state.packets_received += 1   # 1 HTTP Response Packet
+        # Update isolated endpoint counters
+        active_data["total_bytes_out"] += out_bytes
+        active_data["total_bytes_in"] += in_bytes
+        active_data["packets_sent"] += 1       
+        active_data["packets_received"] += 1   
         
-        st.session_state.latencies.append(latency)
-        st.session_state.speeds.append(speed)
+        active_data["latencies"].append(latency)
+        active_data["speeds"].append(speed)
     else:
         latency_slot.metric("Response Time (Ping)", "N/A")
         speed_slot.metric("Fetch Speed", "0 KB/s")
         status_slot.metric("Connection Status", "Offline / Error 🔴")
-        st.session_state.logs.append(f"[{timestamp}] Failed to reach target endpoint {target_url}.")
-        
-        # Count failed attempt as a sent packet attempt
-        st.session_state.packets_sent += 1
+        active_data["logs"].append(f"[{timestamp}] Failed to reach target endpoint {st.session_state.current_target}.")
+        active_data["packets_sent"] += 1
 
-    # Render native line charts
-    if st.session_state.latencies:
-        latency_chart_slot.line_chart(st.session_state.latencies)
-        speed_chart_slot.line_chart(st.session_state.speeds)
+    # Render native line charts using isolated history
+    if active_data["latencies"]:
+        latency_chart_slot.line_chart(active_data["latencies"])
+        speed_chart_slot.line_chart(active_data["speeds"])
 
     time.sleep(refresh_rate)
     st.rerun()
 else:
-    latency_slot.metric("Response Time (Ping)", "0 ms")
-    speed_slot.metric("Fetch Speed", "0 KB/s")
-    status_slot.metric("Connection Status", "Stopped ⏸️")
+    # Render static state using isolated historical data when stopped/browsing past records
+    last_lat = active_data["latencies"][-1] if active_data["latencies"] else 0.0
+    last_spd = active_data["speeds"][-1] if active_data["speeds"] else 0.0
     
-    if st.session_state.latencies:
-        latency_chart_slot.line_chart(st.session_state.latencies)
-        speed_chart_slot.line_chart(st.session_state.speeds)
+    latency_slot.metric("Response Time (Ping)", f"{last_lat:.1f} ms")
+    speed_slot.metric("Fetch Speed", f"{last_spd:.2f} KB/s")
+    status_slot.metric("Connection Status", active_data["status"])
+    
+    if active_data["latencies"]:
+        latency_chart_slot.line_chart(active_data["latencies"])
+        speed_chart_slot.line_chart(active_data["speeds"])
