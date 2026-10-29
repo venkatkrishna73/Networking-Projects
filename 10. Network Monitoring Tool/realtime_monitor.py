@@ -9,7 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🌐 Advanced Network Traffic & QoS Monitor")
+st.title("🌐 Real-Time Network Traffic & QoS Monitor")
 st.caption("Computer Networks Course Project (22PC1IN202) — Application Layer & Traffic Analyzer")
 
 # Initialize session state variables
