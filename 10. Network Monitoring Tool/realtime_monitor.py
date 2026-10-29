@@ -1,7 +1,6 @@
 import streamlit as st
 import time
 import urllib.request
-import psutil
 import pandas as pd
 from datetime import datetime
 
