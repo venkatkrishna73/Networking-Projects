@@ -5,7 +5,7 @@ from datetime import datetime
 
 # Page configuration
 st.set_page_config(
-    page_title="Multi-Endpoint Network Monitor & QoS Analyzer",
+    page_title="Multi-Endpoint Network Monitor ",
     layout="wide"
 )
 
