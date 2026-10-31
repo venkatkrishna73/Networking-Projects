@@ -44,7 +44,7 @@ st.sidebar.divider()
 # PAGE 1: LIVE MONITOR
 # ==========================================
 if app_mode == "Live Monitor":
-    st.title("🌐 Live Network Monitor & QoS Analyzer")
+    st.title("🌐 Live Network Monitor ")
     st.caption("Computer Networks Course Project (22PC1IN202) — Isolated Endpoint Traffic & Latency Tracking")
 
     st.sidebar.header("⚙️ Live Configuration")
